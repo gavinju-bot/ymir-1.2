@@ -1,0 +1,32 @@
+# This workflow will do a clean install of node dependencies, cache/restore them, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Node.js CI
+
+on:
+  pull_request:
+    branches:
+      - master
+      - dev
+      - ymir-pa
+
+
+jobs:
+  web-ci:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js 16.10
+      uses: actions/setup-node@v3
+      with:
+        # node-version: 16.12 or above has issue at caching.
+        node-version: 16.10
+        cache: 'npm'
+        cache-dependency-path: ymir/web/package-lock.json
+    - name: Test with npm
+      run: |
+        time npm ci
+        time CI=true npm run test:coverage
+      working-directory: ymir/web

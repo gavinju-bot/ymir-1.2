@@ -1,0 +1,213 @@
+syntax = "proto3";
+
+package ymir.backend;
+
+import "mir_command.proto";
+
+option go_package = "/protos";
+
+enum MergeStrategy {
+    STOP = 0;
+    HOST = 1;
+    GUEST = 2;
+}
+
+enum UnknownTypesStrategy {
+    UTS_STOP = 0;
+    UTS_IGNORE = 1;
+    UTS_ADD = 2;
+}
+
+enum RequestType {
+    UNKNOWN = 0;
+    // CMD task
+    CMD_BRANCH_DEL = 1;
+    CMD_BRANCH_LIST = 2;
+    CMD_BRANCH_CHECKOUT = 3;
+    CMD_BRANCH_CREATE = 4;
+    CMD_CLONE = 5;
+    CMD_COMMIT = 6;
+    CMD_FILTER = 7;
+    CMD_INIT = 8;
+    CMD_LOG = 9;
+    CMD_MERGE = 10;
+    CMD_INFERENCE = 11;
+    CMD_LABEL_ADD = 12;
+    CMD_LABEL_GET = 13;
+    CMD_TERMINATE = 14;
+    CMD_PULL_IMAGE = 16;
+    CMD_GPU_INFO_GET = 17;
+    CMD_SAMPLING = 18;
+    CMD_EVALUATE = 19;
+    CMD_REPO_CHECK = 20;
+    CMD_REPO_CLEAR = 21;
+    CMD_VERSIONS_GET = 22;
+
+    // Sandbox path operation
+    USER_LIST = 101;
+    USER_CREATE = 102;
+    USER_REMOVE = 103;
+    REPO_LIST = 104;
+    REPO_CREATE = 105;
+    REPO_REMOVE = 106;
+
+    // Long task
+    TASK_CREATE = 1001;
+
+    reserved 15;
+}
+
+message GeneralReq {
+    string user_id = 1;
+    string repo_id = 2;
+    RequestType req_type = 3;
+    string task_id = 4;
+    // singleton ops arg, such as checkout rev, create branch, etc.
+    string singleton_op = 5;
+    // ancestor task id that initiates this task from.
+    string his_task_id = 6;
+    // dest branch id to store current task result.
+    string dst_dataset_id = 7;
+    // branches you want to concat the data from
+    repeated string in_dataset_ids = 8;
+    // branches you want to exclude the data from
+    repeated string ex_dataset_ids = 9;
+    // keyid should be included, joint with OR
+    repeated int32 in_class_ids = 10;
+    // keyid that expected to be exclude, joint with OR
+    repeated int32 ex_class_ids = 11;
+    bool force = 12;
+    string commit_message = 13;
+    string model_hash = 14;
+    string asset_dir = 15;
+    string docker_image_config = 16;
+    bool check_only=18;
+    string executant_name = 19;
+    MergeStrategy merge_strategy = 20;
+    mir.command.TaskType terminated_task_type = 21;
+    oneof sampling {
+        int32 sampling_count = 22;
+        float sampling_rate = 23;
+    }
+    string task_parameters = 24;
+    LabelCollection label_collection = 25;
+    mir.command.EvaluateConfig evaluate_config = 26;
+    string model_stage = 27;
+    ReqCreateTask req_create_task = 1001;
+
+    reserved 17;
+}
+
+message GeneralResp {
+    int32 code = 1;
+    string req_task_id = 2;
+    string message = 3;
+    repeated string ext_strs = 4;
+    string hash_id = 6;
+    map<int32 , string> docker_image_config = 7;
+    int32 available_gpu_counts = 8;
+    LabelCollection label_collection = 9;
+    bool ops_ret = 10;
+    repeated string sandbox_versions = 11;
+    RespCMDInference detection = 1000;
+    bool enable_livecode = 1001;
+    mir.command.Evaluation evaluation = 1002;
+
+    reserved 5;
+}
+
+// base args for create task request
+message ReqCreateTask {
+    // task type
+    mir.command.TaskType task_type = 1;
+    bool no_task_monitor = 2;
+
+    TaskReqTraining training = 101;
+    TaskReqMining mining = 102;
+    TaskReqImportDataset import_dataset = 103;
+    TaskReqExporting exporting = 104;
+    TaskReqCopyData copy = 105;
+    TaskReqLabeling labeling = 106;
+    TaskReqImportModel import_model = 107;
+}
+
+message TaskReqTraining {
+    message TrainingDatasetType {
+        string dataset_id = 1;
+        mir.command.TvtType dataset_type = 2;
+    }
+    repeated TrainingDatasetType in_dataset_types = 1;
+    string preprocess_config = 2;
+}
+
+message TaskReqMining {
+    int32 top_k = 1;  // > 0, will keep all if set to 0.
+    bool generate_annotations = 2;
+}
+
+message TaskReqImportDataset {
+    // store media files
+    string asset_dir = 1;
+    // single pascal xml per asset, same base_filename as in asset-folder
+    string pred_dir = 2;
+    string gt_dir = 3;
+    // strategy for unknown class types: stop, ignore or add
+    UnknownTypesStrategy unknown_types_strategy = 4;
+    bool clean_dirs = 5;
+}
+
+message TaskReqExporting {
+    string dataset_id = 1;
+    mir.command.AnnoFormat format = 2;
+    string asset_dir = 3;
+    string pred_dir = 4;
+    string gt_dir = 5;
+}
+
+message TaskReqCopyData {
+    string src_user_id = 1;
+    string src_repo_id = 2;
+    bool name_strategy_ignore = 3;
+    bool drop_annotations = 4;
+}
+
+enum AnnotationType {
+    NOT_SET = 0;
+    GT = 1;
+    PRED = 2;
+}
+
+message TaskReqLabeling {
+    repeated string labeler_accounts = 1;
+    string expert_instruction_url = 2;
+    string project_name = 3;
+    bool export_annotation = 4;
+    AnnotationType annotation_type = 5;
+}
+
+message TaskReqImportModel {
+    string model_package_path = 1;
+}
+
+message RespCMDInference {
+    /// key: image id, value: annotations of that single image
+    map<string, mir.command.SingleImageAnnotations> image_annotations = 1;
+};
+
+message LabelCollection {
+    repeated Label labels = 1;
+    string ymir_version = 2;
+}
+
+message Label {
+    int32 id = 1;
+    string name = 2;
+    repeated string aliases = 3;
+    string create_time = 4;  // RFC 3339 date strings
+    string update_time = 5;  // RFC 3339 date strings
+}
+
+service mir_controller_service {
+    rpc data_manage_request(GeneralReq) returns (GeneralResp) {}
+    // rpc view_request(GeneralReq) returns (GeneralResp) {}
+} // mcs_dm
